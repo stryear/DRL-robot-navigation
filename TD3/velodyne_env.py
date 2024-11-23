@@ -83,7 +83,7 @@ class GazeboEnv:
         self.last_odom = None
 
         self.set_self_state = ModelState()
-        self.set_self_state.model_name = "r1"
+        self.set_self_state.model_name = "p3dx" # 修改模型名称
         self.set_self_state.pose.position.x = 0.0
         self.set_self_state.pose.position.y = 0.0
         self.set_self_state.pose.position.z = 0.0
@@ -106,18 +106,19 @@ class GazeboEnv:
 
         # Launch the simulation with the given launchfile name
         rospy.init_node("gym", anonymous=True)
-        if launchfile.startswith("/"):
-            fullpath = launchfile
-        else:
-            fullpath = os.path.join(os.path.dirname(__file__), "assets", launchfile)
-        if not path.exists(fullpath):
-            raise IOError("File " + fullpath + " does not exist")
+        # 不使用这段代码启动gazebo, 自己先手动启动gazebo
+        # if launchfile.startswith("/"):
+        #     fullpath = launchfile
+        # else:
+        #     fullpath = os.path.join(os.path.dirname(__file__), "assets", launchfile)
+        # if not path.exists(fullpath):
+        #     raise IOError("File " + fullpath + " does not exist")
 
-        subprocess.Popen(["roslaunch", "-p", port, fullpath])
-        print("Gazebo launched!")
+        # subprocess.Popen(["roslaunch", "-p", port, fullpath])
+        # print("Gazebo launched!")
 
         # Set up the ROS publishers and subscribers
-        self.vel_pub = rospy.Publisher("/r1/cmd_vel", Twist, queue_size=1)
+        self.vel_pub = rospy.Publisher("/p3dx/cmd_vel", Twist, queue_size=1)
         self.set_state = rospy.Publisher(
             "gazebo/set_model_state", ModelState, queue_size=10
         )
@@ -130,8 +131,9 @@ class GazeboEnv:
         self.velodyne = rospy.Subscriber(
             "/velodyne_points", PointCloud2, self.velodyne_callback, queue_size=1
         )
+        # 修该订阅的topic
         self.odom = rospy.Subscriber(
-            "/r1/odom", Odometry, self.odom_callback, queue_size=1
+            "/p3dx/odom", Odometry, self.odom_callback, queue_size=1
         )
 
     # Read velodyne pointcloud and turn it into distance data, then select the minimum value for each angle

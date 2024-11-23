@@ -53,6 +53,28 @@ $ cd ~/DRL-robot-navigation/catkin_ws
 $ catkin_make
 ```
 
+**velodyne_simulator报错**
+解决办法:
+```
+sudo apt-get remove libprotobuf-dev
+which protoc
+sudo rm /usr/local/bin/protoc
+
+git clone -b v3.6.1 https://github.com/protocolbuffers/protobuf.git
+cd protobuf
+git submodule update --init --recursive
+./autogen.sh
+sudo make clean
+sudo make uninstall
+./configure CXXFLAGS=-fPIC
+make
+make install
+
+sudo ldconfig #不行加上这句
+```
+参考链接:
+https://blog.csdn.net/weixin_41648131/article/details/127426292
+
 Open a terminal and set up sources:
 ```shell
 $ export ROS_HOSTNAME=localhost
