@@ -118,22 +118,25 @@ class GazeboEnv:
         # print("Gazebo launched!")
 
         # Set up the ROS publishers and subscribers
-        self.vel_pub = rospy.Publisher("/p3dx/cmd_vel", Twist, queue_size=1)
+        #--------------------------发布内容----------------------------
+        self.vel_pub = rospy.Publisher("/p3dx/cmd_vel", Twist, queue_size=1) #用于发布移动机器人的控制信息
         self.set_state = rospy.Publisher(
-            "gazebo/set_model_state", ModelState, queue_size=10
+            "gazebo/set_model_state", ModelState, queue_size=10    #用于设置移动机器人的位置、角度信息
         )
-        self.unpause = rospy.ServiceProxy("/gazebo/unpause_physics", Empty)
-        self.pause = rospy.ServiceProxy("/gazebo/pause_physics", Empty)
-        self.reset_proxy = rospy.ServiceProxy("/gazebo/reset_world", Empty)
-        self.publisher = rospy.Publisher("goal_point", MarkerArray, queue_size=3)
-        self.publisher2 = rospy.Publisher("linear_velocity", MarkerArray, queue_size=1)
-        self.publisher3 = rospy.Publisher("angular_velocity", MarkerArray, queue_size=1)
+        self.publisher = rospy.Publisher("goal_point", MarkerArray, queue_size=3) #用于发布目标点的位置信息
+        self.publisher2 = rospy.Publisher("linear_velocity", MarkerArray, queue_size=1) #线速度 MarkerArraty算法中无实际作用
+        self.publisher3 = rospy.Publisher("angular_velocity", MarkerArray, queue_size=1) #角速度 MarkerArray算法中无实际作用
+        #--------------------------服务内容----------------------------
+        self.unpause = rospy.ServiceProxy("/gazebo/unpause_physics", Empty) #恢复仿真
+        self.pause = rospy.ServiceProxy("/gazebo/pause_physics", Empty)     #暂停仿真
+        self.reset_proxy = rospy.ServiceProxy("/gazebo/reset_world", Empty) #重置仿真环境
+        #--------------------------订阅内容----------------------------
         self.velodyne = rospy.Subscriber(
-            "/velodyne_points", PointCloud2, self.velodyne_callback, queue_size=1
+            "/velodyne_points", PointCloud2, self.velodyne_callback, queue_size=1 #订阅激光雷达发布的点云
         )
         # 修该订阅的topic
         self.odom = rospy.Subscriber(
-            "/p3dx/odom", Odometry, self.odom_callback, queue_size=1
+            "/p3dx/odom", Odometry, self.odom_callback, queue_size=1       #订阅里程计信息
         )
 
     # Read velodyne pointcloud and turn it into distance data, then select the minimum value for each angle
@@ -160,36 +163,37 @@ class GazeboEnv:
     # Perform an action and read a new state
     def step(self, action):
         target = False
-
+        # 发布机器人的动作，这里的step输入是action，action[0]是线速度，action[1]是角速度
         # Publish the robot action
         vel_cmd = Twist()
         vel_cmd.linear.x = action[0]
         vel_cmd.angular.z = action[1]
         self.vel_pub.publish(vel_cmd)
         self.publish_markers(action)
-
+        # 首先unpause，发布消息后，开始仿真
         rospy.wait_for_service("/gazebo/unpause_physics")
         try:
             self.unpause()
         except (rospy.ServiceException) as e:
             print("/gazebo/unpause_physics service call failed")
-
+        # 接下来需要停一小段时间，让小车以目前的速度行驶一段时间，TIME_DELTA = 0.1
         # propagate state for TIME_DELTA seconds
         time.sleep(TIME_DELTA)
-
+        # 然后我们停止仿真，开始观测目前的状态
         rospy.wait_for_service("/gazebo/pause_physics")
         try:
             pass
             self.pause()
         except (rospy.ServiceException) as e:
             print("/gazebo/pause_physics service call failed")
-
+        # 检测碰撞
         # read velodyne laser state
         done, collision, min_laser = self.observe_collision(self.velodyne_data)
+        # 雷达状态
         v_state = []
         v_state[:] = self.velodyne_data[:]
         laser_state = [v_state]
-
+        # 从里程计信息中获取小车朝向
         # Calculate robot heading from odometry data
         self.odom_x = self.last_odom.pose.pose.position.x
         self.odom_y = self.last_odom.pose.pose.position.y
@@ -201,12 +205,12 @@ class GazeboEnv:
         )
         euler = quaternion.to_euler(degrees=False)
         angle = round(euler[2], 4)
-
+        # 计算到目标点的距离
         # Calculate distance to the goal from the robot
         distance = np.linalg.norm(
             [self.odom_x - self.goal_x, self.odom_y - self.goal_y]
         )
-
+        # 计算偏离角度
         # Calculate the relative angle between the robots heading and heading toward the goal
         skew_x = self.goal_x - self.odom_x
         skew_y = self.goal_y - self.odom_y
@@ -226,19 +230,21 @@ class GazeboEnv:
         if theta < -np.pi:
             theta = -np.pi - theta
             theta = np.pi - theta
-
+        # 判断是否到达了目标点
         # Detect if the goal has been reached and give a large positive reward
         if distance < GOAL_REACHED_DIST:
             target = True
             done = True
-
+        # 输出机器人状态
         robot_state = [distance, theta, action[0], action[1]]
         state = np.append(laser_state, robot_state)
+        # 计算奖励
         reward = self.get_reward(target, collision, action, min_laser)
+        # 返回状态、奖励、是否结束、是否到达目标点
         return state, reward, done, target
 
     def reset(self):
-
+        # 重置环境
         # Resets the state of the environment and returns an initial observation.
         rospy.wait_for_service("/gazebo/reset_world")
         try:
@@ -258,6 +264,7 @@ class GazeboEnv:
             x = np.random.uniform(-4.5, 4.5)
             y = np.random.uniform(-4.5, 4.5)
             position_ok = check_pos(x, y)
+        # 下面通过 /gazebo/set_model_state 话题更改移动机器人的初始位置
         object_state.pose.position.x = x
         object_state.pose.position.y = y
         # object_state.pose.position.z = 0.
@@ -269,21 +276,22 @@ class GazeboEnv:
 
         self.odom_x = object_state.pose.position.x
         self.odom_y = object_state.pose.position.y
-
+        # 更改一个目标点
         # set a random goal in empty space in environment
         self.change_goal()
+        # 更改环境中的小方块障碍物
         # randomly scatter boxes in the environment
         self.random_box()
         self.publish_markers([0.0, 0.0])
-
+        #开始仿真
         rospy.wait_for_service("/gazebo/unpause_physics")
         try:
             self.unpause()
         except (rospy.ServiceException) as e:
             print("/gazebo/unpause_physics service call failed")
-
+        #执行一段时间，让小车移动
         time.sleep(TIME_DELTA)
-
+        #停止仿真，获得目前的状态
         rospy.wait_for_service("/gazebo/pause_physics")
         try:
             self.pause()
@@ -438,10 +446,26 @@ class GazeboEnv:
 
     @staticmethod
     def get_reward(target, collision, action, min_laser):
+        """
+        计算奖励函数。
+    
+        参数:
+        target (bool): 是否到达目标。
+        collision (bool): 是否发生碰撞。
+        action (list): 当前动作，包含线速度和角速度。
+        min_laser (float): 激光雷达测量的最小距离。
+    
+        返回:
+        float: 奖励值。
+        """
         if target:
+            # 如果到达目标，返回高奖励
             return 100.0
         elif collision:
+            # 如果发生碰撞，返回高惩罚
             return -100.0
         else:
+            # 否则，根据动作和激光雷达数据计算奖励
             r3 = lambda x: 1 - x if x < 1 else 0.0
+            # 奖励由线速度、角速度和最小激光距离决定
             return action[0] / 2 - abs(action[1]) / 2 - r3(min_laser) / 2

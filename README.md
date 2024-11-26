@@ -95,8 +95,16 @@ $ python3 train_velodyne_td3.py
 To check the training process on tensorboard:
 ```shell
 $ cd ~/DRL-robot-navigation/TD3
-$ tensorboard --logdir runs
+$ tensorboard --logdir runs --port 6007 --load_fast true
 ```
+
+**运行tensorboard --logdir runs报错**
+错误: TypeError: MessageToJson() got an unexpected keyword argument 'including_default_value_fields'
+解决方法:
+```shell
+pip install protobuf==3.20.0
+```
+参考链接: https://blog.csdn.net/qq_43506262/article/details/140012524
 
 To kill the training process:
 ```shell

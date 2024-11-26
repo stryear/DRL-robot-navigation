@@ -218,6 +218,7 @@ class TD3(object):
 
 # Set the parameters for the implementation
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # cuda or cpu
+print("Device: ", device)
 seed = 0  # Random seed number
 eval_freq = 5e3  # After how many steps to perform the evaluation
 max_ep = 500  # maximum number of steps per episode
@@ -307,7 +308,7 @@ while timestep < max_timesteps:
             network.save(file_name, directory="./pytorch_models")
             np.save("./results/%s" % (file_name), evaluations)
             epoch += 1
-
+        # 这部分是当结束本回合后的重置部分，使用env.reset()重置环境，给小车和障碍物重新分配位置，并对其他变量初始化
         state = env.reset()
         done = False
 
@@ -318,7 +319,7 @@ while timestep < max_timesteps:
     # add some exploration noise
     if expl_noise > expl_min:
         expl_noise = expl_noise - ((1 - expl_min) / expl_decay_steps)
-
+    #这部分是将我们观测获得的状态输入到神经网络之中，从中获取动作
     action = network.get_action(np.array(state))
     action = (action + np.random.normal(0, expl_noise, size=action_dim)).clip(
         -max_action, max_action
@@ -340,7 +341,7 @@ while timestep < max_timesteps:
             count_rand_actions -= 1
             action = random_action
             action[0] = -1
-
+    #这里我们将动作输入到环境之中，进行step操作，step函数返回next_state,reward,done,target
     # Update action to fall in range [0,1] for linear velocity and [-1,1] for angular velocity
     a_in = [(action[0] + 1) / 2, action[1]]
     next_state, reward, done, target = env.step(a_in)
